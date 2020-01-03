@@ -5,7 +5,7 @@ from glob import glob
 import threading
 import numpy as np
 from util import get_color_array, get_features_array, preprocess_data, \
-    get_grad_array
+    get_grad_array , hdr_compression
 import os
 
 
@@ -41,6 +41,7 @@ def get_data(f):
     # preprocessing the data
     data = preprocess_data(input_color, input_features, input_shape)
     grad = get_grad_array(dir, file_name)
+    grad = hdr_compression(grad)
     return np.concatenate((data, grad), axis=2)
 
 
