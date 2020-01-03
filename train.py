@@ -2,7 +2,7 @@ import tensorflow as tf
 import numpy as np
 import time
 from numpy import inf
-from GradNet.results.data_generator import data_generator
+from data_generator import data_generator
 from util import data_loss, first_order_loss, grad_loss, calc_grad_x, calc_grad_y
 from model import GradNet, GNet
 import os
