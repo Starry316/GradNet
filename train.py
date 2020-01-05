@@ -47,8 +47,8 @@ def train():
         tf.train.Checkpoint(g_model=g_net).restore(FLAGS.g_weights)
         print('restore grad model from %s, g model from %s'%(FLAGS.grad_weights, FLAGS.g_weights))
         # print('restore model from %s'%grad_weights)
-    g_net.build(input_shape=(FLAGS.batch_size, 256, 256, 12))
-    grad_net.build(input_shape=(FLAGS.batch_size, 256, 256, 12))
+    g_net.build(input_shape=(FLAGS.batch_size, 256, 256, 10))
+    grad_net.build(input_shape=(FLAGS.batch_size, 256, 256, 10))
 
     # Adam 优化器
     g_optimizer = tf.keras.optimizers.Adam(beta_1=0.5, lr=learning_rate)
