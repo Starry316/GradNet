@@ -1,7 +1,13 @@
+import array
+import os
+from glob import glob
+
 import Imath
 import OpenEXR
 import numpy as np
 import tensorflow as tf
+
+
 
 @tf.function
 def calc_grad_x(data):
@@ -28,7 +34,6 @@ def grad_loss(pred_gx, pred_gy, g_x, g_y):
 
 @tf.function
 def cal_suround(p):
-    # 计算上下左右四个元素和中间元素的差，返回四个矩阵
     batch_size =tf.shape(p)[0]
     h = tf.shape(p)[1]
     w = tf.shape(p)[2]
@@ -39,7 +44,7 @@ def cal_suround(p):
 
     right_p = p[:, :, 1:, :] - p[:, :, :w - 1, :]
     left_p = p[:, :, :w - 1, :] - p[:, :, 1:, :]
-
+    #
     bottom_p = tf.concat((tf.zeros([batch_size, 1, w, c]), bottom_p), axis=1)
     top_p = tf.concat((top_p, tf.zeros([batch_size, 1, w, c])), axis=1)
     right_p = tf.concat((tf.zeros([batch_size, h, 1, c]), right_p), axis=2)
@@ -50,52 +55,53 @@ def cal_suround(p):
 
 @tf.function
 def first_order_loss(pred, features, ib, G):
-    h = tf.shape(pred)[1]
-    w = tf.shape(pred)[2]
 
     top_i, bottom_i, left_i, right_i = cal_suround(pred)
     top_f, bottom_f, left_f, right_f = cal_suround(features)
     top_ib, bottom_ib, left_ib, right_ib = cal_suround(ib)
 
-    top_w = tf.exp(-9 * tf.square(tf.norm(top_ib, axis=[3, -1])))
-    bottom_w = tf.exp(-9 * tf.square(tf.norm(bottom_ib, axis=[3, -1])))
-    left_w = tf.exp(-9 * tf.square(tf.norm(left_ib, axis=[3, -1])))
-    right_w = tf.exp(-9 * tf.square(tf.norm(right_ib, axis=[3, -1])))
-
-    G = tf.reshape(G, [-1, h, w, 3, 7])
-
-    # feature 的差值, 1e-9为正则项,防止出现NaN
-    top_f = tf.expand_dims(top_f, -1) + 1e-9
-    bottom_f = tf.expand_dims(bottom_f, -1) + 1e-9
-    left_f =  tf.expand_dims(left_f, -1) + 1e-9
-    right_f = tf.expand_dims(right_f, -1) + 1e-9
-
-    res_top = tf.matmul(G, top_f)
-    res_bottom = tf.matmul(G, bottom_f)
-    res_left = tf.matmul(G, left_f)
-    res_right = tf.matmul(G, right_f)
-
-    res_top = tf.reshape(res_top, [-1, h, w, 3])
-    res_bottom = tf.reshape(res_bottom, [-1, h, w, 3])
-    res_left = tf.reshape(res_left, [-1, h, w, 3])
-    res_right = tf.reshape(res_right, [-1, h, w, 3])
-
-    loss = top_w * tf.norm(top_i - res_top, axis=[3, -1]) + \
-           bottom_w *tf.norm(bottom_i - res_bottom, axis=[3, -1]) + \
-           left_w * tf.norm(left_i - res_left, axis=[3, -1]) + \
-           right_w * tf.norm(right_i - res_right, axis=[3, -1])
-
-    return tf.reduce_mean(loss) / 4
+    top_w = tf.exp(-9 * tf.square(top_ib))
+    bottom_w = tf.exp(-9 * tf.square(bottom_ib))
+    left_w = tf.exp(-9 * tf.square(left_ib))
+    right_w = tf.exp(-9 * tf.square(right_ib))
 
 
+    res_top = tf.reduce_sum((G * top_f), -1 )
+    res_bottom = tf.reduce_sum((G * bottom_f), -1)
+    res_left = tf.reduce_sum((G *  left_f), -1)
+    res_right = tf.reduce_sum((G *  right_f), -1)
+
+    res_top = tf.expand_dims(res_top,-1)
+    res_bottom = tf.expand_dims(res_bottom, -1)
+    res_left = tf.expand_dims(res_left, -1)
+    res_right = tf.expand_dims(res_right, -1)
+
+
+
+    loss = tf.reduce_mean(top_w * tf.abs(top_i - res_top))
+    loss += tf.reduce_mean(bottom_w *tf.abs(bottom_i - res_bottom))
+    loss += tf.reduce_mean(left_w * tf.abs(left_i - res_left))
+    loss += tf.reduce_mean(right_w * tf.abs(right_i - res_right))
+
+
+    return loss
+
+@tf.function
+def hdr_compression_tf(I):
+
+    return tf.sign(I)*tf.math.log(1+tf.abs(I)*16)/tf.math.log(17.0)
+
+@tf.function
+def revert_hdr_tf(I):
+    sign = tf.sign(I)
+    return sign * ((tf.exp(tf.abs(I)*tf.math.log(17.0))-1)/16)
 
 def hdr_compression(I):
-    # log(17) is 2.833213344056216
-    return np.sign(I)*np.log(1+np.abs(I)*16)/2.833213344056216
+    return np.sign(I)*np.log(1+np.abs(I)*16)/np.log(17.0)
 
 def revert_hdr(I):
     sign = np.sign(I)
-    return sign * ((np.exp(np.abs(I)*2.833213344056216)-1)/16)
+    return sign * ((np.exp(np.abs(I)*np.log(17.0))-1)/16)
 
 def data_normalize(data_unnormalized, min_feature, max_feature):
     data_normalized = (data_unnormalized - min_feature) / (max_feature - min_feature)
@@ -134,17 +140,31 @@ def get_features_array(input_shape, path):
     f.close()
     return data
 
-def preprocess_data(input_color,input_features, input_shape):
+
+def writeEXR(image, name):
+    R = image[:, :, 0].reshape(-1)
+    G = image[:, :, 1].reshape(-1)
+    B = image[:, :, 2].reshape(-1)
+    (Rs, Gs, Bs) = [array.array('f', Chan).tobytes() for Chan in (R, G, B)]
+    out = OpenEXR.OutputFile(name, OpenEXR.Header(image.shape[1], image.shape[0]))
+    out.writePixels({'R': Rs, 'G': Gs, 'B': Bs})
+
+
+def preprocess_data(input_color,input_features, input_grad, input_shape):
+    input_features[input_features > 1e4] = 1e4
     feature_normal = input_features[:, :, 0:3].reshape(input_shape[0], input_shape[1], 3)
     feature_depth = input_features[:, :, 3:4].reshape(input_shape[0], input_shape[1], 1)
     feature_albedo = input_features[:, :, 4:7].reshape(input_shape[0], input_shape[1], 3)
-
+    input_grad = hdr_compression(input_grad)
     input_color = hdr_compression(input_color)
     feature_normal = (feature_normal + 1) / 2
-    feature_albedo = data_normalize(feature_albedo, np.min(feature_albedo), np.max(feature_albedo))
-    data = np.concatenate((input_color,  # 3
+
+    data = np.concatenate((input_color,  # 1
                            feature_depth,  # 1
                            feature_normal,  # 3
                            feature_albedo,  # 3
+                           input_grad # 2
                            ), axis=2)
     return data
+
+

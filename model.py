@@ -2,8 +2,9 @@ import tensorflow as tf
 
 
 initializer = tf.keras.initializers.glorot_normal(seed=None)
+# initializer = tf.keras.initializers.he_normal(seed=None)
 
-# Gbranch
+# G branch
 class GNet(tf.keras.Model):
     def __init__(self):
         super(GNet, self).__init__()
@@ -11,7 +12,7 @@ class GNet(tf.keras.Model):
         # self.lrelu1 = tf.keras.layers.LeakyReLU()
         self.conv2 = tf.keras.layers.Conv2D(64, (3, 3), padding='same', kernel_initializer=initializer)
         # self.lrelu2 = tf.keras.layers.LeakyReLU()
-        self.conv3 = tf.keras.layers.Conv2D(21, (3, 3), padding='same', kernel_initializer=initializer)
+        self.conv3 = tf.keras.layers.Conv2D(7, (3, 3),padding='same', kernel_initializer=initializer)
 
     def call(self, inputs, training=None):
         x = inputs
@@ -21,9 +22,7 @@ class GNet(tf.keras.Model):
         return x
 
 
-
-
-
+# data branch
 class GradNet(tf.keras.Model):
 
     def __init__(self):
@@ -45,11 +44,11 @@ class GradNet(tf.keras.Model):
         self.deconv1 = tf.keras.layers.Conv2DTranspose(128, (4, 4), padding='same', strides=2, kernel_initializer=initializer)
         self.deconv2 = tf.keras.layers.Conv2DTranspose(64, (4, 4), padding='same', strides=2, kernel_initializer=initializer)
         self.deconv3 = tf.keras.layers.Conv2DTranspose(32, (4, 4), padding='same', strides=2, kernel_initializer=initializer)
-        self.deconv4 = tf.keras.layers.Conv2DTranspose(3, (3, 3), padding='same', strides=1, kernel_initializer=initializer)
+        self.deconv4 = tf.keras.layers.Conv2DTranspose(1, (3, 3), padding='same', strides=1, kernel_initializer=initializer)
 
     def call(self, inputs, training=None):
-        d = inputs[:, :, :, :10]
-        g = inputs[:, :, :, 10:]
+        d = inputs[:, :, :, :8]
+        g = inputs[:, :, :, 8:]
         # data branch
         d1 = tf.nn.leaky_relu(self.dconv1(d, training=training))
         d2 = tf.nn.leaky_relu(self.dconv2(d1, training=training))
@@ -84,10 +83,10 @@ class ResBlock(tf.keras.layers.Layer):
     def __init__(self, filter_num, stride=1):
         super(ResBlock, self).__init__()
         self.conv1 = tf.keras.layers.Conv2D(filter_num, (3, 3), strides=stride, padding='same', kernel_initializer=initializer)
-        self.bn1 = tf.keras.layers.BatchNormalization()
+        # self.bn1 = tf.keras.layers.BatchNormalization()
         self.lrelu1 = tf.keras.layers.LeakyReLU()
         self.conv2 = tf.keras.layers.Conv2D(filter_num, (3, 3), strides=1, padding='same', kernel_initializer=initializer)
-        self.bn2 = tf.keras.layers.BatchNormalization()
+        # self.bn2 = tf.keras.layers.BatchNormalization()
         if stride != 1:
             self.downsample = tf.keras.Sequential()
             self.downsample.add(tf.keras.layers.Conv2D(filter_num, (1, 1), strides=stride))
@@ -96,11 +95,11 @@ class ResBlock(tf.keras.layers.Layer):
 
     def call(self, inputs, training=None):
         out = self.conv1(inputs)
-        out = self.bn1(out)
+        # out = self.bn1(out)
         out = self.lrelu1(out)
         out = self.conv2(out)
-        out = self.bn2(out)
+        # out = self.bn2(out)
         identity = self.downsample(inputs)
         output = tf.keras.layers.add([out, identity])
-        output = tf.nn.leaky_relu(output)
+        # output = tf.nn.leaky_relu(output)
         return output
