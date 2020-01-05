@@ -28,9 +28,9 @@ def get_data(f):
     input_features = get_features_array(input_shape, features_path)
     grad = get_grad_array(dir, file_name)
     # preprocessing the data
-    r = preprocess_data(input_color[:,:,:1], input_features, grad[:,:,:1], input_shape)
-    g = preprocess_data(input_color[:,:,1:2], input_features, grad[:,:,1:2], input_shape)
-    b = preprocess_data(input_color[:,:,2:3], input_features, grad[:,:,2:3], input_shape)
+    r = preprocess_data(input_color[:,:,:1], input_features, np.concatenate((grad[:,:, :1],grad[:,:,3:4]),axis=-1), input_shape)
+    g = preprocess_data(input_color[:,:,1:2], input_features, np.concatenate((grad[:,:, 1:2],grad[:,:,4:5]),axis=-1), input_shape)
+    b = preprocess_data(input_color[:,:,2:3], input_features, np.concatenate((grad[:,:, 2:3],grad[:,:,5:6]),axis=-1), input_shape)
 
     return r,g,b
 

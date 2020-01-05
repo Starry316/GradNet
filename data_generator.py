@@ -8,7 +8,7 @@ def data_generator(path, batch_size):
         features = tf.io.parse_single_example(example_proto,
                                               features={
                                                   'data': tf.io.FixedLenFeature(
-                                                      shape=(256, 256, 12),
+                                                      shape=(256, 256, 10),
                                                       dtype=tf.float32),
 
                                               })
